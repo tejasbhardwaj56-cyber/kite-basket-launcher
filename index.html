@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Trade Basket</title>
+<style>
+:root{--bg:#fff;--fg:#1b1b1b;--mut:#666;--line:#ddd;--buy:#0a7a3a;--sell:#b3261e;--warn:#9a6700;--btn:#1f5fbf;--ok:#0a7a3a}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121212;--fg:#eee;--mut:#aaa;--line:#333;--buy:#5fd08a;--sell:#ff8a80;--warn:#e3b341;--btn:#4c8dff;--ok:#5fd08a}}
+:root[data-theme="dark"]{--bg:#121212;--fg:#eee;--mut:#aaa;--line:#333;--buy:#5fd08a;--sell:#ff8a80;--warn:#e3b341;--btn:#4c8dff;--ok:#5fd08a}
+body{background:var(--bg);color:var(--fg);font:16px/1.45 system-ui,sans-serif;margin:0 auto;max-width:720px;padding:16px}
+h1{font-size:20px;margin:4px 0 8px}p{margin:6px 0}.mut{color:var(--mut);font-size:13px}
+table{border-collapse:collapse;width:100%;font-size:14px;margin:10px 0}td,th{border-bottom:1px solid var(--line);padding:6px 4px;text-align:left}
+.n{text-align:right}.BUY{color:var(--buy);font-weight:600}.SELL{color:var(--sell);font-weight:600}.warn{color:var(--warn);font-weight:600}.ok{color:var(--ok);font-weight:600}
+button{width:100%;background:var(--btn);color:#fff;border:0;border-radius:8px;padding:14px;font-size:17px;margin:12px 0;cursor:pointer}
+button:disabled{background:#888}code{word-break:break-all;font-size:12px}
+</style>
+</head>
+<body>
+<div id="app"><p>Loading…</p></div>
+<script>
+/* Generic, data-free launcher (go-live P2-01, mobile flow). The batch travels ONLY in the link's #fragment, which the browser
+   never sends to this host. This page decodes it, shows the orders, enforces the expiry, and on the owner's tap POSTs the
+   orders to Kite Publisher (kite.zerodha.com/connect/basket). Nothing is placed here: Kite asks the owner to log in and to tap
+   Place. After Place / Cancel, Kite redirects back here with ?status=... and the page shows the outcome. */
+(function () {
+  var app = document.getElementById('app');
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  var q = new URLSearchParams(location.search);
+  if (q.get('status')) {                                   // back from Kite
+    var st = q.get('status');
+    if (history.replaceState) history.replaceState(null, '', location.pathname);   // drop the request_token from the address bar
+    app.innerHTML = st === 'success'
+      ? '<h1 class="ok">Basket sent to Kite ✓</h1><p>Kite accepted the basket. Check the order book in the Kite app; the evening email will confirm fills.</p>'
+      : '<h1 class="warn">Basket NOT placed (' + esc(st) + ')</h1><p>Nothing was sent. An unplaced basket counts as rejected for this batch.</p>';
+    return;
+  }
+  var frag = location.hash.replace(/^#/, '');
+  var m = /(?:^|&)d=([A-Za-z0-9_-]+)/.exec(frag);
+  if (!m) { app.innerHTML = '<h1>No basket in this link.</h1><p>Open the link from the basket email.</p>'; return; }
+  var d;
+  try {
+    var b64 = m[1].replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4) b64 += '=';
+    var bin = atob(b64), bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    d = JSON.parse(new TextDecoder().decode(bytes));
+  } catch (e) { app.innerHTML = '<h1>This link is damaged.</h1><p>Open it again from the email.</p>'; return; }
+  if (d.v !== 1 || !d.k || !Array.isArray(d.o) || d.o.length < 1 || d.o.length > 10) { app.innerHTML = '<h1>Unsupported basket link.</h1>'; return; }
+  var rows = d.o.map(function (o, i) {
+    return '<tr><td>' + (i + 1) + '</td><td>' + esc(o.tradingsymbol) + '</td><td class="' + esc(o.transaction_type) + '">' + esc(o.transaction_type) +
+      '</td><td class="n">' + esc(o.quantity) + '</td><td class="n">' + Number(o.price).toFixed(2) + '</td><td class="n">' +
+      Math.round(o.quantity * o.price).toLocaleString('en-IN') + '</td></tr>';
+  }).join('');
+  var dl = new Date(d.x);
+  app.innerHTML = '<h1>' + esc(d.t || 'Trade basket') + '</h1>' +
+    '<p><b>' + esc(d.b) + '</b> &middot; ' + d.o.length + ' orders &middot; LIMIT, CNC, ' + esc(d.o[0].variety).toUpperCase() + '</p>' +
+    (d.n ? '<p class="warn">' + esc(d.n) + '</p>' : '') +
+    '<table><tr><th>#</th><th>symbol</th><th>side</th><th class="n">qty</th><th class="n">limit</th><th class="n">Rs</th></tr>' + rows + '</table>' +
+    '<p id="exp">Valid until ' + esc(dl.toLocaleString('en-IN', {timeZone: 'Asia/Kolkata'})) + ' IST.</p>' +
+    '<form id="f" method="post" action="https://kite.zerodha.com/connect/basket">' +
+    '<input type="hidden" name="api_key"><input type="hidden" name="data">' +
+    '<button id="go" type="submit">Open in Kite (review, then Place)</button></form>' +
+    '<p class="mut">Nothing is placed from this page. Kite will ask you to log in and to tap Place.</p>' +
+    '<p class="mut">batch <code>' + esc(d.h) + '</code></p>';
+  var f = document.getElementById('f');
+  f.api_key.value = d.k;
+  f.data.value = JSON.stringify(d.o);
+  function chk() {
+    if (Date.now() > d.x) {
+      document.getElementById('go').disabled = true;
+      document.getElementById('exp').innerHTML = '<span class="warn">EXPIRED: this batch can no longer be opened. It counts as rejected.</span>';
+    }
+  }
+  f.addEventListener('submit', function (e) { chk(); if (document.getElementById('go').disabled) e.preventDefault(); });
+  chk(); setInterval(chk, 30000);
+})();
+</script>
+</body>
+</html>

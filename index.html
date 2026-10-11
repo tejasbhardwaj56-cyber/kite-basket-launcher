@@ -33,7 +33,7 @@ button:disabled{background:#888}code{word-break:break-all;font-size:12px}
     if (history.replaceState) history.replaceState(null, '', location.pathname);   // drop the request_token from the address bar
     if (act === 'login') {
       app.innerHTML = st === 'success' && lg === 'ok'
-        ? '<h1 class="ok">Kite login OK ✓</h1><p>The server has today's read-only session. No order was placed.</p>'
+        ? '<h1 class="ok">Kite login OK ✓</h1><p>The server now has the read-only session for today. No order was placed.</p>'
         : '<h1 class="warn">Kite login did not complete (' + esc(st) + ', server session: ' + esc(lg || '?') + ')</h1>';
       return;
     }
